@@ -8,10 +8,15 @@
 (define-constant err-already-voted (err u104))
 (define-constant err-custom-order-not-found (err u105))
 (define-constant err-invalid-royalty (err u106))
+(define-constant err-auction-not-found (err u107))
+(define-constant err-auction-expired (err u108))
+(define-constant err-bid-too-low (err u109))
+(define-constant err-auction-not-expired (err u110))
 
 (define-data-var next-token-id uint u1)
 (define-data-var next-listing-id uint u1)
 (define-data-var next-order-id uint u1)
+(define-data-var next-auction-id uint u1)
 (define-data-var platform-fee-percent uint u250)
 
 (define-map token-metadata uint {
@@ -45,6 +50,18 @@
 (define-map artisan-votes {artisan: principal, voter: principal} bool)
 (define-map artisan-vote-count principal uint)
 (define-map weekly-votes principal uint)
+
+(define-map auctions uint {
+    token-id: uint,
+    seller: principal,
+    reserve-price: uint,
+    highest-bid: uint,
+    highest-bidder: (optional principal),
+    end-block: uint,
+    active: bool
+})
+
+(define-map auction-bids {auction-id: uint, bidder: principal} uint)
 
 (define-public (mint-woodcraft 
     (recipient principal)
@@ -191,3 +208,76 @@
 
 (define-read-only (has-voted (artisan principal) (voter principal))
     (is-some (map-get? artisan-votes {artisan: artisan, voter: voter})))
+
+(define-public (start-auction (token-id uint) (reserve-price uint) (duration-blocks uint))
+    (let ((auction-id (var-get next-auction-id)))
+        (asserts! (is-eq (some tx-sender) (nft-get-owner? woodcraft-nft token-id)) err-not-token-owner)
+        (map-set auctions auction-id {
+            token-id: token-id,
+            seller: tx-sender,
+            reserve-price: reserve-price,
+            highest-bid: u0,
+            highest-bidder: none,
+            end-block: (+ stacks-block-height duration-blocks),
+            active: true
+        })
+        (var-set next-auction-id (+ auction-id u1))
+        (ok auction-id)))
+
+(define-public (place-bid (auction-id uint) (bid-amount uint))
+    (let ((auction (unwrap! (map-get? auctions auction-id) err-auction-not-found)))
+        (asserts! (get active auction) err-auction-not-found)
+        (asserts! (< stacks-block-height (get end-block auction)) err-auction-expired)
+        (asserts! (> bid-amount (get highest-bid auction)) err-bid-too-low)
+        (asserts! (>= bid-amount (get reserve-price auction)) err-bid-too-low)
+        (let ((previous-bidder (get highest-bidder auction))
+              (previous-bid (get highest-bid auction)))
+            (try! (stx-transfer? bid-amount tx-sender (as-contract tx-sender)))
+            (match previous-bidder
+                bidder (try! (as-contract (stx-transfer? previous-bid tx-sender bidder)))
+                true)
+            (map-set auction-bids {auction-id: auction-id, bidder: tx-sender} bid-amount)
+            (map-set auctions auction-id (merge auction {
+                highest-bid: bid-amount,
+                highest-bidder: (some tx-sender)
+            }))
+            (ok true))))
+
+(define-public (finalize-auction (auction-id uint))
+    (let ((auction (unwrap! (map-get? auctions auction-id) err-auction-not-found))
+          (token-id (get token-id auction))
+          (seller (get seller auction))
+          (highest-bid (get highest-bid auction))
+          (metadata (unwrap! (map-get? token-metadata token-id) err-auction-not-found)))
+        (asserts! (get active auction) err-auction-not-found)
+        (asserts! (>= stacks-block-height (get end-block auction)) err-auction-not-expired)
+        (match (get highest-bidder auction)
+            winner (let ((royalty-amount (/ (* highest-bid (get royalty-percent metadata)) u10000))
+                        (platform-fee (/ (* highest-bid (var-get platform-fee-percent)) u10000))
+                        (seller-amount (- highest-bid (+ royalty-amount platform-fee))))
+                       (try! (as-contract (stx-transfer? royalty-amount tx-sender (get artist metadata))))
+                       (try! (as-contract (stx-transfer? platform-fee tx-sender contract-owner)))
+                       (try! (as-contract (stx-transfer? seller-amount tx-sender seller)))
+                       (try! (nft-transfer? woodcraft-nft token-id seller winner))
+                       (map-set auctions auction-id (merge auction {active: false}))
+                       (ok (some winner)))
+            (begin
+                (map-set auctions auction-id (merge auction {active: false}))
+                (ok none)))))
+
+(define-public (cancel-auction (auction-id uint))
+    (let ((auction (unwrap! (map-get? auctions auction-id) err-auction-not-found)))
+        (asserts! (is-eq tx-sender (get seller auction)) err-not-token-owner)
+        (asserts! (get active auction) err-auction-not-found)
+        (asserts! (is-eq (get highest-bid auction) u0) err-auction-not-found)
+        (map-set auctions auction-id (merge auction {active: false}))
+        (ok true)))
+
+(define-read-only (get-auction (auction-id uint))
+    (map-get? auctions auction-id))
+
+(define-read-only (get-auction-bid (auction-id uint) (bidder principal))
+    (map-get? auction-bids {auction-id: auction-id, bidder: bidder}))
+
+(define-read-only (get-next-auction-id)
+    (var-get next-auction-id))
