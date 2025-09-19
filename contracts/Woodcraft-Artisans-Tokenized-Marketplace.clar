@@ -281,3 +281,10 @@
 
 (define-read-only (get-next-auction-id)
     (var-get next-auction-id))
+
+(define-public (burn-woodcraft (token-id uint))
+  (begin
+    (asserts! (is-eq (some tx-sender) (nft-get-owner? woodcraft-nft token-id)) err-not-token-owner)
+    (try! (nft-burn? woodcraft-nft token-id tx-sender))
+    (map-delete token-metadata token-id)
+    (ok true)))
