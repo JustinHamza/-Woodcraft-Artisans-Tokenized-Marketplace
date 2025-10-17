@@ -12,6 +12,10 @@
 (define-constant err-auction-expired (err u108))
 (define-constant err-bid-too-low (err u109))
 (define-constant err-auction-not-expired (err u110))
+(define-constant err-loan-not-found (err u111))
+(define-constant err-loan-active (err u112))
+(define-constant err-loan-expired (err u113))
+(define-constant err-insufficient-collateral (err u114))
 
 (define-data-var next-token-id uint u1)
 (define-data-var next-listing-id uint u1)
@@ -63,7 +67,18 @@
 
 (define-map auction-bids {auction-id: uint, bidder: principal} uint)
 
-(define-public (mint-woodcraft 
+(define-map nft-loans uint {
+    borrower: principal,
+    token-id: uint,
+    loan-amount: uint,
+    interest-rate: uint,
+    due-date: uint,
+    repaid: bool
+})
+
+(define-data-var next-loan-id uint u1)
+
+(define-public (mint-woodcraft
     (recipient principal)
     (name (string-ascii 50))
     (description (string-ascii 500))
@@ -288,3 +303,46 @@
     (try! (nft-burn? woodcraft-nft token-id tx-sender))
     (map-delete token-metadata token-id)
     (ok true)))
+
+(define-public (borrow-against-nft (token-id uint) (loan-amount uint) (interest-rate uint) (duration-blocks uint))
+  (let ((loan-id (var-get next-loan-id)))
+    (asserts! (is-eq (some tx-sender) (nft-get-owner? woodcraft-nft token-id)) err-not-token-owner)
+    (asserts! (> loan-amount u0) err-insufficient-funds)
+    (asserts! (<= interest-rate u1000) err-invalid-royalty)
+    (try! (nft-transfer? woodcraft-nft token-id tx-sender (as-contract tx-sender)))
+    (try! (as-contract (stx-transfer? loan-amount tx-sender tx-sender)))
+    (map-set nft-loans loan-id {
+      borrower: tx-sender,
+      token-id: token-id,
+      loan-amount: loan-amount,
+      interest-rate: interest-rate,
+      due-date: (+ stacks-block-height duration-blocks),
+      repaid: false
+    })
+    (var-set next-loan-id (+ loan-id u1))
+    (ok loan-id)))
+
+(define-public (repay-loan (loan-id uint))
+  (let ((loan (unwrap! (map-get? nft-loans loan-id) err-loan-not-found))
+        (interest-amount (/ (* (get loan-amount loan) (get interest-rate loan)) u10000))
+        (total-repayment (+ (get loan-amount loan) interest-amount)))
+    (asserts! (is-eq tx-sender (get borrower loan)) err-not-token-owner)
+    (asserts! (not (get repaid loan)) err-loan-active)
+    (asserts! (<= stacks-block-height (get due-date loan)) err-loan-expired)
+    (try! (stx-transfer? total-repayment tx-sender (as-contract tx-sender)))
+    (try! (as-contract (nft-transfer? woodcraft-nft (get token-id loan) tx-sender (get borrower loan))))
+    (map-set nft-loans loan-id (merge loan {repaid: true}))
+    (ok true)))
+
+(define-public (liquidate-loan (loan-id uint))
+  (let ((loan (unwrap! (map-get? nft-loans loan-id) err-loan-not-found)))
+    (asserts! (> stacks-block-height (get due-date loan)) err-auction-expired)
+    (asserts! (not (get repaid loan)) err-loan-active)
+    (map-set nft-loans loan-id (merge loan {repaid: true}))
+    (ok true)))
+
+(define-read-only (get-loan (loan-id uint))
+  (map-get? nft-loans loan-id))
+
+(define-read-only (get-next-loan-id)
+  (var-get next-loan-id))

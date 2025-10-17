@@ -11,6 +11,7 @@ Talented woodworkers struggle to access premium buyers and their crafts are ofte
 - 🛒 **Direct Marketplace**: Buy and sell woodcraft NFTs directly
 - 🤝 **Custom Orders**: Fund artisans for custom work via smart contracts
 - 🗳️ **Artisan Spotlight**: Community voting system to highlight local artisans
+- 💰 **NFT Collateralized Loans**: Borrow against your woodcraft NFTs with interest-based repayment
 
 ## 🚀 Quick Start
 
@@ -67,6 +68,16 @@ Create custom work orders with escrow payments and completion tracking.
 
 Vote for your favorite artisans and track weekly spotlight rankings.
 
+### 💰 NFT Loans
+
+```clarity
+(borrow-against-nft token-id loan-amount interest-rate duration-blocks)
+(repay-loan loan-id)
+(liquidate-loan loan-id)
+```
+
+Borrow STX against your woodcraft NFTs with interest-based repayment terms.
+
 ## 📊 Read-Only Functions
 
 - `get-token-metadata` - Get NFT metadata
@@ -75,6 +86,8 @@ Vote for your favorite artisans and track weekly spotlight rankings.
 - `get-artisan-votes` - Get total votes for an artisan
 - `get-weekly-votes` - Get weekly votes for spotlight
 - `get-token-owner` - Get current token owner
+- `get-loan` - Get loan details
+- `get-next-loan-id` - Get next available loan ID
 
 ## 💼 Usage Examples
 
@@ -107,11 +120,19 @@ Vote for your favorite artisans and track weekly spotlight rankings.
 
 ```clarity
 (contract-call? .woodcraft-marketplace create-custom-order
-  'ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG
-  "Custom cedar jewelry box with intricate carvings"
-  u500000
-  u144)
+   'ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG
+   "Custom cedar jewelry box with intricate carvings"
+   u500000
+   u144)
 ```
+
+### Borrow Against NFT
+
+```clarity
+(contract-call? .woodcraft-marketplace borrow-against-nft u1 u1000000 u500 u1440)
+```
+
+Borrow 1,000,000 microSTX against NFT #1 with 5% interest over 1440 blocks (approximately 1 day).
 
 ## 🔧 Configuration
 
@@ -125,6 +146,7 @@ Vote for your favorite artisans and track weekly spotlight rankings.
 - Royalty validation (max 10%)
 - Secure escrow for custom orders
 - Duplicate vote prevention
+- NFT collateralized lending with interest calculation
 
 ## 🏗️ Project Structure
 
@@ -160,6 +182,7 @@ MIT License - Build the future of artisan marketplaces!
 - [ ] Multi-chain support
 - [ ] Artisan verification system
 - [ ] Batch minting capabilities
+- [x] NFT collateralized loans
 
 ---
 
