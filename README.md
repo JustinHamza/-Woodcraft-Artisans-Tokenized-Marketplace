@@ -12,6 +12,7 @@ Talented woodworkers struggle to access premium buyers and their crafts are ofte
 - 🤝 **Custom Orders**: Fund artisans for custom work via smart contracts
 - 🗳️ **Artisan Spotlight**: Community voting system to highlight local artisans
 - 💰 **NFT Collateralized Loans**: Borrow against your woodcraft NFTs with interest-based repayment
+- 🏠 **NFT Rental System**: Rent out your woodcraft NFTs for temporary use with time-based access control
 
 ## 🚀 Quick Start
 
@@ -78,6 +79,16 @@ Vote for your favorite artisans and track weekly spotlight rankings.
 
 Borrow STX against your woodcraft NFTs with interest-based repayment terms.
 
+### 🏠 NFT Rental
+
+```clarity
+(list-for-rental token-id rental-price duration-blocks)
+(rent-nft rental-id)
+(return-nft rental-id)
+```
+
+List your woodcraft NFTs for rental, rent available NFTs, and return rented NFTs after the rental period.
+
 ## 📊 Read-Only Functions
 
 - `get-token-metadata` - Get NFT metadata
@@ -88,6 +99,8 @@ Borrow STX against your woodcraft NFTs with interest-based repayment terms.
 - `get-token-owner` - Get current token owner
 - `get-loan` - Get loan details
 - `get-next-loan-id` - Get next available loan ID
+- `get-rental` - Get rental details
+- `get-next-rental-id` - Get next available rental ID
 
 ## 💼 Usage Examples
 
@@ -133,6 +146,15 @@ Borrow STX against your woodcraft NFTs with interest-based repayment terms.
 ```
 
 Borrow 1,000,000 microSTX against NFT #1 with 5% interest over 1440 blocks (approximately 1 day).
+
+### Rent an NFT
+
+```clarity
+(contract-call? .woodcraft-marketplace list-for-rental u1 u50000 u1440)
+(contract-call? .woodcraft-marketplace rent-nft u1)
+```
+
+List NFT #1 for rental at 50,000 microSTX for 1440 blocks, then rent it.
 
 ## 🔧 Configuration
 
@@ -183,6 +205,7 @@ MIT License - Build the future of artisan marketplaces!
 - [ ] Artisan verification system
 - [ ] Batch minting capabilities
 - [x] NFT collateralized loans
+- [x] NFT rental system
 
 ---
 

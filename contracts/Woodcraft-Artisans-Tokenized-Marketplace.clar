@@ -346,3 +346,58 @@
 
 (define-read-only (get-next-loan-id)
   (var-get next-loan-id))
+
+(define-data-var next-rental-id uint u1)
+
+(define-map nft-rentals uint {
+  token-id: uint,
+  owner: principal,
+  renter: (optional principal),
+  rental-price: uint,
+  duration-blocks: uint,
+  start-block: (optional uint),
+  active: bool
+})
+
+(define-public (list-for-rental (token-id uint) (rental-price uint) (duration-blocks uint))
+  (let ((rental-id (var-get next-rental-id)))
+    (asserts! (is-eq (some tx-sender) (nft-get-owner? woodcraft-nft token-id)) err-not-token-owner)
+    (map-set nft-rentals rental-id {
+      token-id: token-id,
+      owner: tx-sender,
+      renter: none,
+      rental-price: rental-price,
+      duration-blocks: duration-blocks,
+      start-block: none,
+      active: true
+    })
+    (var-set next-rental-id (+ rental-id u1))
+    (ok rental-id)))
+
+(define-public (rent-nft (rental-id uint))
+  (let ((rental (unwrap! (map-get? nft-rentals rental-id) err-listing-not-found)))
+    (asserts! (get active rental) err-listing-not-found)
+    (asserts! (is-none (get renter rental)) err-listing-not-found)
+    (try! (stx-transfer? (get rental-price rental) tx-sender (as-contract tx-sender)))
+    (try! (as-contract (stx-transfer? (get rental-price rental) tx-sender (get owner rental))))
+    (try! (nft-transfer? woodcraft-nft (get token-id rental) (get owner rental) tx-sender))
+    (map-set nft-rentals rental-id (merge rental {
+      renter: (some tx-sender),
+      start-block: (some stacks-block-height),
+      active: false
+    }))
+    (ok true)))
+
+(define-public (return-nft (rental-id uint))
+  (let ((rental (unwrap! (map-get? nft-rentals rental-id) err-listing-not-found)))
+    (asserts! (is-eq tx-sender (unwrap! (get renter rental) err-not-token-owner)) err-not-token-owner)
+    (asserts! (>= stacks-block-height (+ (unwrap! (get start-block rental) err-listing-not-found) (get duration-blocks rental))) err-auction-not-expired)
+    (try! (nft-transfer? woodcraft-nft (get token-id rental) tx-sender (get owner rental)))
+    (map-set nft-rentals rental-id (merge rental {renter: none, start-block: none, active: true}))
+    (ok true)))
+
+(define-read-only (get-rental (rental-id uint))
+  (map-get? nft-rentals rental-id))
+
+(define-read-only (get-next-rental-id)
+  (var-get next-rental-id))
