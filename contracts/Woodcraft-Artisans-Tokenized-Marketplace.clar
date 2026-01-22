@@ -349,6 +349,15 @@
 
 (define-data-var next-rental-id uint u1)
 
+(define-data-var reward-rate uint u1)
+
+(define-map staked-nfts uint {
+  token-id: uint,
+  owner: principal,
+  stake-time: uint,
+  accumulated-rewards: uint
+})
+
 (define-map nft-rentals uint {
   token-id: uint,
   owner: principal,
